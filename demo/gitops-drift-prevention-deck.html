@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitOps Drift Prevention with ACM &amp; ArgoCD</title>
+  <link href="https://cdn.jsdelivr.net/npm/@rhds/tokens@3.0.2/css/global.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* === RESET & BASE === */
+    :root { color-scheme: light; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* === COLOR VARIABLES — Core Light === */
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f2f2f2;
+      --bg-surface: #e0e0e0;
+      --text-primary: #151515;
+      --text-secondary: #4d4d4d;
+      --text-muted: #707070;
+      --accent: #ee0000;
+      --accent-dark: #a60000;
+      --accent-light: #f56e6e;
+      --tag-border: #c7c7c7;
+      --icon-filter: none;
+      --icon-filter-accent: invert(12%) sepia(100%) saturate(10000%) hue-rotate(0deg) brightness(95%);
+      --font-display: var(--rh-font-family-heading, 'Red Hat Display', sans-serif);
+      --font-body: var(--rh-font-family-body-text, 'Red Hat Text', sans-serif);
+      --font-mono: var(--rh-font-family-code, 'Red Hat Mono', monospace);
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* === LOGO === */
+    .rh-logo { height: 28px; width: auto; }
+    .rh-logo.small { height: 20px; }
+    .rh-logo.large { height: 40px; }
+
+    /* === ICON STYLES === */
+    .rh-icon { height: 48px; width: 48px; filter: var(--icon-filter); vertical-align: middle; }
+    .rh-icon.small { height: 24px; width: 24px; }
+    .rh-icon.medium { height: 48px; width: 48px; }
+    .rh-icon.large { height: 64px; width: 64px; }
+    .rh-icon.xl { height: 96px; width: 96px; }
+    .rh-icon.accent { filter: var(--icon-filter-accent); }
+
+    /* === SLIDE CONTAINER === */
+    .deck { width: 100vw; height: 100vh; position: relative; }
+
+    .slide {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: var(--rh-space-4xl, 80px) var(--rh-space-3xl, 64px);
+      position: relative;
+      overflow: hidden;
+    }
+    .slide.active { display: flex; }
+
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      right: -10%;
+      width: 60%;
+      height: 60%;
+      background: radial-gradient(ellipse, rgba(238,0,0,0.04) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .slide > * { position: relative; z-index: 1; }
+
+    .slide:nth-child(even) { background: var(--bg-secondary); }
+    .slide:nth-child(odd) { background: var(--bg-primary); }
+
+    /* === BREADCRUMB === */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: var(--rh-space-sm, 8px);
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-xs, 0.75rem);
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: var(--rh-space-2xl, 48px);
+    }
+
+    /* === SLIDE LABEL === */
+    .slide-label {
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-xs, 0.75rem);
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: var(--rh-space-lg, 24px);
+      font-weight: 500;
+    }
+
+    /* === TYPOGRAPHY === */
+    h1 {
+      font-family: var(--font-display);
+      font-size: var(--rh-font-size-heading-2xl, 3rem);
+      font-weight: 900;
+      line-height: 1.1;
+      color: var(--text-primary);
+      margin-bottom: var(--rh-space-lg, 24px);
+    }
+    h2 {
+      font-family: var(--font-display);
+      font-size: var(--rh-font-size-heading-lg, 2rem);
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text-primary);
+      margin-bottom: var(--rh-space-lg, 24px);
+    }
+    h3 {
+      font-family: var(--font-display);
+      font-size: var(--rh-font-size-heading-md, 1.5rem);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: var(--rh-space-md, 16px);
+    }
+    .subtitle {
+      font-family: var(--font-body);
+      font-size: var(--rh-font-size-body-text-xl, 1.25rem);
+      color: var(--text-secondary);
+      line-height: 1.5;
+      max-width: 720px;
+      margin-bottom: var(--rh-space-xl, 32px);
+    }
+    .accent { color: var(--accent); }
+    .body-text {
+      font-size: var(--rh-font-size-body-text-lg, 1.125rem);
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 800px;
+    }
+
+    /* === TAGS === */
+    .tags { display: flex; flex-wrap: wrap; gap: var(--rh-space-sm, 8px); margin-bottom: var(--rh-space-xl, 32px); }
+    .tag {
+      display: inline-block;
+      padding: var(--rh-space-xs, 4px) var(--rh-space-md, 16px);
+      border: var(--rh-border-width-sm, 1px) solid var(--tag-border);
+      border-radius: var(--rh-border-radius-pill, 64px);
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-xs, 0.75rem);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    .tag.accent { border-color: var(--accent); color: var(--accent); }
+
+    /* === ATTRIBUTION === */
+    .attribution {
+      font-family: var(--font-body);
+      font-size: var(--rh-font-size-body-text-sm, 0.875rem);
+      color: var(--text-muted);
+      margin-top: auto;
+      padding-top: var(--rh-space-xl, 32px);
+    }
+    .source {
+      font-family: var(--font-body);
+      font-size: var(--rh-font-size-body-text-xs, 0.75rem);
+      color: var(--text-muted);
+      margin-top: auto;
+      padding-top: var(--rh-space-md, 16px);
+    }
+
+    /* === BIG NUMBER === */
+    .big-number {
+      font-family: var(--font-display);
+      font-size: 6rem;
+      font-weight: 900;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: var(--rh-space-md, 16px);
+    }
+    .big-number-context {
+      font-size: var(--rh-font-size-body-text-xl, 1.25rem);
+      color: var(--text-secondary);
+      max-width: 600px;
+    }
+
+    /* === CODE BLOCK === */
+    .code-block {
+      background: var(--bg-secondary);
+      border: var(--rh-border-width-sm, 1px) solid var(--tag-border);
+      border-radius: var(--rh-border-radius-default, 3px);
+      padding: var(--rh-space-lg, 24px) var(--rh-space-xl, 32px);
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-md, 1rem);
+      line-height: 1.7;
+      color: var(--text-primary);
+      max-width: 700px;
+      overflow-x: auto;
+      box-shadow: var(--rh-box-shadow-sm, 0 2px 4px 0 rgba(21,21,21,0.2));
+    }
+    .code-block .code-comment { color: var(--text-muted); }
+    .code-block .code-key { color: var(--accent-dark); }
+    .code-block .code-value { color: #147878; }
+
+    /* === ARCHITECTURE DIAGRAM === */
+    .arch-diagram {
+      display: flex;
+      gap: var(--rh-space-xl, 32px);
+      margin-top: var(--rh-space-lg, 24px);
+      flex-wrap: wrap;
+    }
+    .arch-column {
+      flex: 1;
+      min-width: 200px;
+    }
+    .arch-box {
+      background: rgba(242,242,242,0.8);
+      border: 1px solid #c7c7c7;
+      border-radius: var(--rh-border-radius-default, 3px);
+      padding: var(--rh-space-md, 16px) var(--rh-space-lg, 24px);
+      margin-bottom: var(--rh-space-sm, 8px);
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-sm, 0.875rem);
+      color: var(--text-primary);
+      box-shadow: var(--rh-box-shadow-sm, 0 2px 4px 0 rgba(21,21,21,0.2));
+      display: flex;
+      align-items: center;
+      gap: var(--rh-space-sm, 8px);
+    }
+    .arch-box.highlight {
+      border-color: var(--accent);
+      border-width: var(--rh-border-width-md, 2px);
+    }
+    .arch-label {
+      font-family: var(--font-display);
+      font-size: var(--rh-font-size-body-text-sm, 0.875rem);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: var(--rh-space-sm, 8px);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .arch-arrow {
+      text-align: center;
+      color: var(--accent);
+      font-size: 1.5rem;
+      padding: var(--rh-space-xs, 4px) 0;
+    }
+
+    /* === COMPARISON TABLE === */
+    .drift-table {
+      width: 100%;
+      max-width: 900px;
+      border-collapse: collapse;
+      margin-top: var(--rh-space-lg, 24px);
+    }
+    .drift-table th {
+      font-family: var(--font-display);
+      font-size: var(--rh-font-size-body-text-sm, 0.875rem);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+      padding: var(--rh-space-sm, 8px) var(--rh-space-md, 16px);
+      border-bottom: var(--rh-border-width-md, 2px) solid var(--accent);
+      color: var(--text-primary);
+    }
+    .drift-table td {
+      font-family: var(--font-body);
+      font-size: var(--rh-font-size-body-text-md, 1rem);
+      padding: var(--rh-space-sm, 8px) var(--rh-space-md, 16px);
+      border-bottom: 1px solid var(--tag-border);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+    .drift-table td:first-child { color: var(--text-primary); font-weight: 500; }
+    .drift-table .heal-time {
+      font-family: var(--font-mono);
+      color: #63993d;
+      font-weight: 700;
+    }
+
+    /* === FEATURE GRID === */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--rh-space-lg, 24px);
+      margin-top: var(--rh-space-lg, 24px);
+      max-width: 850px;
+    }
+    .feature-card {
+      background: rgba(242,242,242,0.8);
+      border: 1px solid var(--tag-border);
+      border-radius: var(--rh-border-radius-default, 3px);
+      padding: var(--rh-space-lg, 24px);
+      box-shadow: var(--rh-box-shadow-sm, 0 2px 4px 0 rgba(21,21,21,0.2));
+    }
+    .feature-card h3 {
+      display: flex;
+      align-items: center;
+      gap: var(--rh-space-sm, 8px);
+      margin-bottom: var(--rh-space-sm, 8px);
+      font-size: var(--rh-font-size-heading-sm, 1.25rem);
+    }
+    .feature-card p {
+      font-size: var(--rh-font-size-body-text-md, 1rem);
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* === TAKEAWAY LIST === */
+    .takeaway-list {
+      list-style: none;
+      max-width: 750px;
+    }
+    .takeaway-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--rh-space-md, 16px);
+      padding: var(--rh-space-md, 16px) 0;
+      border-bottom: 1px solid var(--tag-border);
+      font-size: var(--rh-font-size-body-text-lg, 1.125rem);
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .takeaway-list li:last-child { border-bottom: none; }
+    .takeaway-number {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: var(--rh-font-size-heading-md, 1.5rem);
+      color: var(--accent);
+      min-width: 32px;
+    }
+
+    /* === SETUP STEPS === */
+    .setup-steps {
+      list-style: none;
+      max-width: 750px;
+    }
+    .setup-steps li {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--rh-space-md, 16px);
+      padding: var(--rh-space-sm, 8px) 0;
+      font-size: var(--rh-font-size-body-text-lg, 1.125rem);
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .setup-steps code {
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-sm, 0.875rem);
+      background: var(--bg-surface);
+      padding: 2px 8px;
+      border-radius: var(--rh-border-radius-default, 3px);
+    }
+    .step-num {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 24px;
+    }
+
+    /* === LOGO FOOTER === */
+    .logo-footer {
+      margin-top: auto;
+      padding-top: var(--rh-space-2xl, 48px);
+    }
+
+    /* === THANK YOU === */
+    .thank-you-slide {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .thank-you-slide h1 {
+      font-size: 4.5rem;
+      margin-bottom: var(--rh-space-xl, 32px);
+    }
+    .thank-you-slide::before {
+      top: -30%;
+      right: -5%;
+      width: 70%;
+      height: 70%;
+      background: radial-gradient(ellipse, rgba(238,0,0,0.06) 0%, transparent 70%);
+    }
+
+    /* === CONTROLS === */
+    .controls {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--rh-space-md, 16px) var(--rh-space-xl, 32px);
+      font-family: var(--font-mono);
+      font-size: var(--rh-font-size-body-text-xs, 0.75rem);
+      color: var(--text-muted);
+      z-index: 100;
+      background: linear-gradient(transparent, rgba(255,255,255,0.9));
+    }
+    .nav-hint { letter-spacing: 0.03em; }
+    .progress { letter-spacing: 0.05em; }
+    .progress .current { color: var(--accent); font-weight: 700; }
+
+    /* === NOTES PANEL === */
+    .notes-panel {
+      position: fixed;
+      bottom: 48px;
+      right: 0;
+      width: 380px;
+      max-height: 50vh;
+      background: var(--bg-primary);
+      border: 1px solid var(--tag-border);
+      border-right: none;
+      border-radius: var(--rh-border-radius-default, 3px) 0 0 var(--rh-border-radius-default, 3px);
+      padding: var(--rh-space-lg, 24px);
+      font-family: var(--font-body);
+      font-size: var(--rh-font-size-body-text-sm, 0.875rem);
+      color: var(--text-secondary);
+      line-height: 1.6;
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      z-index: 200;
+      box-shadow: var(--rh-box-shadow-lg, 0 6px 8px 2px rgba(21,21,21,0.3));
+    }
+    .notes-panel.visible { transform: translateX(0); }
+
+    /* === ANIMATIONS === */
+    .slide .animate-in { opacity: 0; transform: translateY(20px); }
+    .slide.active .animate-in { animation: fadeSlideUp 0.6s ease-out forwards; }
+    .slide.active .animate-in:nth-child(2) { animation-delay: 0.1s; }
+    .slide.active .animate-in:nth-child(3) { animation-delay: 0.2s; }
+    .slide.active .animate-in:nth-child(4) { animation-delay: 0.3s; }
+    .slide.active .animate-in:nth-child(5) { animation-delay: 0.4s; }
+    .slide.active .animate-in:nth-child(6) { animation-delay: 0.5s; }
+    .slide.active .animate-in:nth-child(7) { animation-delay: 0.6s; }
+
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* === RESPONSIVE === */
+    @media (max-width: 768px) {
+      .slide { padding: var(--rh-space-xl, 32px) var(--rh-space-lg, 24px); }
+      h1 { font-size: 2rem; }
+      h2 { font-size: 1.5rem; }
+      .big-number { font-size: 4rem; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .arch-diagram { flex-direction: column; }
+      .notes-panel { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+
+    <!-- SLIDE 1: TITLE -->
+    <div class="slide" data-notes="Arrow keys or click to navigate. Press 'N' to toggle contextual notes with references, links, and additional context for each slide. Works in any modern browser — share this HTML file directly. For best results, use fullscreen (F11).">
+      <div class="breadcrumb animate-in">
+        <svg class="rh-logo small" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 613 145" role="img" aria-label="Red Hat"><title>Red Hat</title><path d="M127.47,83.49c12.51,0,30.61-2.58,30.61-17.46a14,14,0,0,0-.31-3.42l-7.45-32.36c-1.72-7.12-3.23-10.35-15.73-16.6C124.89,8.69,103.76.5,97.51.5,91.69.5,90,8,83.06,8c-6.68,0-11.64-5.6-17.89-5.6-6,0-9.91,4.09-12.93,12.5,0,0-8.41,23.72-9.49,27.16A6.43,6.43,0,0,0,42.53,44c0,9.22,36.3,39.45,84.94,39.45M160,72.07c1.73,8.19,1.73,9.05,1.73,10.13,0,14-15.74,21.77-36.43,21.77C78.54,104,37.58,76.6,37.58,58.49a18.45,18.45,0,0,1,1.51-7.33C22.27,52,.5,55,.5,74.22c0,31.48,74.59,70.28,133.65,70.28,45.28,0,56.7-20.48,56.7-36.65,0-12.72-11-27.16-30.83-35.78" fill="#e00"/><path d="M160,72.07c1.73,8.19,1.73,9.05,1.73,10.13,0,14-15.74,21.77-36.43,21.77C78.54,104,37.58,76.6,37.58,58.49a18.45,18.45,0,0,1,1.51-7.33l3.66-9.06A6.43,6.43,0,0,0,42.53,44c0,9.22,36.3,39.45,84.94,39.45,12.51,0,30.61-2.58,30.61-17.46a14,14,0,0,0-.31-3.42Z"/><path d="M579.74,92.8c0,11.89,7.15,17.67,20.19,17.67a52.11,52.11,0,0,0,11.89-1.68V95a24.84,24.84,0,0,1-7.68,1.16c-5.37,0-7.36-1.68-7.36-6.73V68.3h15.56V54.1H596.78v-18l-17,3.68V54.1H568.49V68.3h11.25Zm-53,.32c0-3.68,3.69-5.47,9.26-5.47a43.12,43.12,0,0,1,10.1,1.26v7.15a21.51,21.51,0,0,1-10.63,2.63c-5.46,0-8.73-2.1-8.73-5.57m5.2,17.56c6,0,10.84-1.26,15.36-4.31v3.37h16.82V74.08c0-13.56-9.14-21-24.39-21-8.52,0-16.94,2-26,6.1l6.1,12.52c6.52-2.74,12-4.42,16.83-4.42,7,0,10.62,2.73,10.62,8.31v2.73a49.53,49.53,0,0,0-12.62-1.58c-14.31,0-22.93,6-22.93,16.73,0,9.78,7.78,17.24,20.19,17.24m-92.44-.94h18.09V80.92h30.29v28.82H506V36.12H487.93V64.41H457.64V36.12H439.55ZM370.62,81.87c0-8,6.31-14.1,14.62-14.1A17.22,17.22,0,0,1,397,72.09V91.54A16.36,16.36,0,0,1,385.24,96c-8.2,0-14.62-6.1-14.62-14.09m26.61,27.87h16.83V32.44l-17,3.68V57.05a28.3,28.3,0,0,0-14.2-3.68c-16.19,0-28.92,12.51-28.92,28.5a28.25,28.25,0,0,0,28.4,28.6,25.12,25.12,0,0,0,14.93-4.83ZM320,67c5.36,0,9.88,3.47,11.67,8.83H308.47C310.15,70.3,314.36,67,320,67M291.33,82c0,16.2,13.25,28.82,30.28,28.82,9.36,0,16.2-2.53,23.25-8.42l-11.26-10c-2.63,2.74-6.52,4.21-11.14,4.21a14.39,14.39,0,0,1-13.68-8.83h39.65V83.55c0-17.67-11.88-30.39-28.08-30.39a28.57,28.57,0,0,0-29,28.81M262,51.58c6,0,9.36,3.78,9.36,8.31S268,68.2,262,68.2H244.11V51.58Zm-36,58.16h18.09V82.92h13.77l13.89,26.82H292l-16.2-29.45a22.27,22.27,0,0,0,13.88-20.72c0-13.25-10.41-23.45-26-23.45H226Z" fill="#151515"/></svg>
+        <span>OpenShift Platform</span>
+      </div>
+      <div class="slide-label animate-in">&mdash;&mdash; GitOps Demo &middot; OpenShift 4.20</div>
+      <h1 class="animate-in">GitOps <span class="accent">Drift Prevention</span><br>with ACM &amp; ArgoCD</h1>
+      <div class="subtitle animate-in">Cluster configuration managed through Git, automatically enforced by ArgoCD self-healing, and audited by ACM governance policies.</div>
+      <div class="tags animate-in">
+        <span class="tag accent">Self-Healing</span>
+        <span class="tag">OpenShift GitOps 1.20</span>
+        <span class="tag">ACM 2.16</span>
+        <span class="tag">OpenShift 4.20</span>
+      </div>
+      <div class="attribution animate-in">ACM + ArgoCD Drift Prevention Demo</div>
+    </div>
+
+    <!-- SLIDE 2: THE PROBLEM -->
+    <div class="slide" data-notes="Configuration drift is the #1 cause of unplanned outages in Kubernetes environments. When admins make manual changes to a live cluster &mdash; whether to fix an urgent issue, test a theory, or bypass a slow approval process &mdash; those changes are invisible to version control, untested, and unreviewable. The cluster silently diverges from its intended state.">
+      <div class="slide-label animate-in">&mdash;&mdash; The Problem</div>
+      <h2 class="animate-in"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/alert.svg" alt=""> Manual Changes <span class="accent">Break Clusters</span> Silently</h2>
+      <div class="body-text animate-in" style="margin-bottom: var(--rh-space-xl, 32px);">
+        Every <code style="font-family: var(--font-mono); background: var(--bg-surface); padding: 2px 8px; border-radius: 3px;">oc patch</code>,
+        <code style="font-family: var(--font-mono); background: var(--bg-surface); padding: 2px 8px; border-radius: 3px;">oc delete</code>, or
+        <code style="font-family: var(--font-mono); background: var(--bg-surface); padding: 2px 8px; border-radius: 3px;">oc edit</code>
+        on a live cluster creates invisible drift from the desired state.
+      </div>
+      <div class="feature-grid animate-in">
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/padlock-unlocked.svg" alt=""> Security Bypass</h3>
+          <p>NetworkPolicies deleted, RBAC roles escalated, resource quotas removed &mdash; all without audit trail.</p>
+        </div>
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/vulnerability.svg" alt=""> Invisible Risk</h3>
+          <p>No diff, no review, no rollback. The cluster looks fine until something fails in production.</p>
+        </div>
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/lifecycle.svg" alt=""> Repeated Fixes</h3>
+          <p>Manual changes get overwritten, forgotten, or conflict with the next deployment cycle.</p>
+        </div>
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/scales-of-justice.svg" alt=""> Compliance Gaps</h3>
+          <p>Auditors can't verify cluster state matches policy when changes bypass version control.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: BIG NUMBER -->
+    <div class="slide" data-notes="Gartner and other industry analysts consistently cite configuration drift and human error as the leading causes of infrastructure outages. The exact percentage varies by study, but the consensus is that manual changes are the dominant source of unplanned downtime in production environments.">
+      <div class="slide-label animate-in">&mdash;&mdash; Why This Matters</div>
+      <div style="display: flex; align-items: center; gap: var(--rh-space-xl, 32px);">
+        <img class="rh-icon xl accent animate-in" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/graph-exponential-down.svg" alt="">
+        <div>
+          <div class="big-number animate-in">70%</div>
+          <div class="big-number-context animate-in">of unplanned outages trace back to configuration changes and human error &mdash; not hardware or software failures.</div>
+        </div>
+      </div>
+      <div class="source animate-in">Source: Gartner — Configuration Management Best Practices</div>
+    </div>
+
+    <!-- SLIDE 4: THE SOLUTION -->
+    <div class="slide" data-notes="ArgoCD implements the GitOps pattern: Git is the single source of truth for declarative infrastructure. The key innovation is the selfHeal flag, which creates a continuous reconciliation loop. Unlike a one-time apply, ArgoCD watches the cluster and actively reverts any changes that deviate from Git. Combined with prune: true, it also removes resources that have been deleted from Git.">
+      <div class="slide-label animate-in">&mdash;&mdash; The Solution</div>
+      <h2 class="animate-in"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/automation.svg" alt=""> Git Becomes the <span class="accent">Enforcement Layer</span></h2>
+      <div class="subtitle animate-in">ArgoCD continuously compares cluster state against Git. When drift is detected, it automatically syncs back to the desired state.</div>
+      <div class="code-block animate-in">
+        <span class="code-comment"># bootstrap/argocd-config/cluster-config-application.yaml</span><br>
+        <span class="code-key">syncPolicy</span>:<br>
+        &nbsp;&nbsp;<span class="code-key">automated</span>:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">selfHeal</span>: <span class="code-value">true</span> &nbsp;&nbsp;<span class="code-comment"># Revert manual changes</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">prune</span>: <span class="code-value">true</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># Remove orphaned resources</span><br>
+        &nbsp;&nbsp;<span class="code-key">retry</span>:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">limit</span>: <span class="code-value">5</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">backoff</span>:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-key">duration</span>: <span class="code-value">5s</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: ARCHITECTURE -->
+    <div class="slide" data-notes="The repo has three layers: bootstrap/ is applied manually once to install operators and configure ArgoCD. cluster-config/ is the GitOps-managed directory that ArgoCD watches and enforces. acm-policies/ adds an independent governance layer. The demo/ directory contains the interactive demo script and a teardown script for cleanup. The MultiClusterHub CR is applied separately after the ACM operator CRD and webhook are ready, avoiding race conditions during bootstrap. [IMAGE OPPORTUNITY] Prompt: 'A clean architectural diagram showing a Git repository flowing through ArgoCD into an OpenShift cluster, with a feedback loop arrow showing self-healing. Flat design, Red Hat red and gray color palette, white background, no text, 16:9 aspect ratio.'">
+      <div class="slide-label animate-in">&mdash;&mdash; Architecture</div>
+      <h2 class="animate-in"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/architecture.svg" alt=""> Repository <span class="accent">Drives</span> Cluster State</h2>
+      <div class="arch-diagram animate-in">
+        <div class="arch-column">
+          <div class="arch-label">Bootstrap (One-Time)</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/operator.svg" alt=""> openshift-gitops/</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/operator.svg" alt=""> acm/</div>
+          <div class="arch-box highlight"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/automation.svg" alt=""> argocd-config/</div>
+        </div>
+        <div style="display: flex; align-items: center; font-size: 2rem; color: var(--accent); padding: 0 var(--rh-space-sm, 8px);">&#8594;</div>
+        <div class="arch-column">
+          <div class="arch-label">GitOps-Managed</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/monitor-blank.svg" alt=""> console-banner/</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/padlock-locked.svg" alt=""> rbac/</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/firewall-a.svg" alt=""> network-policy/</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/scalable.svg" alt=""> resource-quota/</div>
+        </div>
+        <div style="display: flex; align-items: center; font-size: 2rem; color: var(--accent); padding: 0 var(--rh-space-sm, 8px);">&#8594;</div>
+        <div class="arch-column">
+          <div class="arch-label">Governance</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/clipboard-checklist.svg" alt=""> acm-policies/</div>
+          <div class="arch-arrow">&#8595;</div>
+          <div class="arch-box"><img class="rh-icon small" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/report.svg" alt=""> Compliance audit</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: WHAT GETS DEPLOYED -->
+    <div class="slide" data-notes="These four resource categories represent common cluster configuration patterns: visual indicators (console banners), access control (RBAC), network security (NetworkPolicy), and resource governance (quotas and limits). Each is defined declaratively in Git and enforced by ArgoCD. The namespaces gitops-demo-rbac, gitops-demo-secured, and gitops-demo-quotas are created automatically via Kustomize.">
+      <div class="slide-label animate-in">&mdash;&mdash; What Gets Deployed</div>
+      <h2 class="animate-in">Four Categories of <span class="accent">Enforced</span> Configuration</h2>
+      <div class="feature-grid animate-in">
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/monitor-blank.svg" alt=""> Console Banner</h3>
+          <p>Blue ConsoleNotification banner: "This cluster is managed by GitOps" with a link to the repo.</p>
+        </div>
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/padlock-locked.svg" alt=""> RBAC</h3>
+          <p>Read-only ClusterRole (<code style="font-family: var(--font-mono); font-size: 0.875rem;">gitops-demo-viewer</code>) bound to authenticated users. No write access.</p>
+        </div>
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/firewall-a.svg" alt=""> Network Policy</h3>
+          <p>Deny-all egress NetworkPolicy in the <code style="font-family: var(--font-mono); font-size: 0.875rem;">gitops-demo-secured</code> namespace.</p>
+        </div>
+        <div class="feature-card">
+          <h3><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/scalable.svg" alt=""> Resource Quota</h3>
+          <p>LimitRange (max 2 CPU) and ResourceQuota in <code style="font-family: var(--font-mono); font-size: 0.875rem;">gitops-demo-quotas</code>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: DRIFT SCENARIOS -->
+    <div class="slide" data-notes="Each drift test represents a real-world scenario: an admin cleaning up resources, a developer bypassing limits, an attacker removing security controls, or a privilege escalation attempt. ArgoCD's default sync interval is 3 minutes, but self-heal triggers faster when webhooks are configured. In this demo, recovery typically happens within 30 seconds. The demo script (demo/demo-script.sh) runs these tests interactively with pauses between each scenario. [MEME OPPORTUNITY] A reaction GIF of 'this is fine' dog could lighten the mood after showing the security scenarios.">
+      <div class="slide-label animate-in">&mdash;&mdash; Live Demo</div>
+      <h2 class="animate-in"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/disruption.svg" alt=""> Break Things. Watch ArgoCD <span class="accent">Fix Them.</span></h2>
+      <table class="drift-table animate-in">
+        <thead>
+          <tr>
+            <th>Attack</th>
+            <th>What Happens</th>
+            <th>Impact</th>
+            <th>Heal Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Delete console banner</td>
+            <td><code style="font-family: var(--font-mono); font-size: 0.875rem;">oc delete consolenotification</code></td>
+            <td>Visual indicator removed</td>
+            <td class="heal-time">~30s</td>
+          </tr>
+          <tr>
+            <td>Modify LimitRange</td>
+            <td>CPU max 2 &#8594; 10 cores</td>
+            <td>Resource limits bypassed</td>
+            <td class="heal-time">~30s</td>
+          </tr>
+          <tr>
+            <td>Delete NetworkPolicy</td>
+            <td>Egress deny-all removed</td>
+            <td>Security policy gone</td>
+            <td class="heal-time">~30s</td>
+          </tr>
+          <tr>
+            <td>RBAC escalation</td>
+            <td>Add secrets/delete to viewer role</td>
+            <td>Privilege escalation</td>
+            <td class="heal-time">~30s</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="source animate-in">All scenarios run via <code style="font-family: var(--font-mono); font-size: 0.75rem;">./demo/demo-script.sh</code> with interactive pauses</div>
+    </div>
+
+    <!-- SLIDE 8: ACM GOVERNANCE -->
+    <div class="slide" data-notes="ACM (Advanced Cluster Management) adds a second layer: governance policies. While ArgoCD heals drift, ACM records compliance events for audit. Even if ArgoCD reverts a change in 30 seconds, ACM captures the brief NonCompliant window. This is valuable for regulated environments where auditors need evidence that security baselines were maintained. ACM policies are optional and defined in the acm-policies/ directory using PolicyGenerator.">
+      <div class="slide-label animate-in">&mdash;&mdash; Governance</div>
+      <h2 class="animate-in"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/clipboard-checklist.svg" alt=""> ACM Adds an <span class="accent">Independent</span> Audit Trail</h2>
+      <div class="subtitle animate-in">ArgoCD heals drift. ACM proves it happened.</div>
+      <div class="feature-grid animate-in" style="grid-template-columns: 1fr 1fr 1fr; max-width: 900px;">
+        <div class="feature-card" style="text-align: center;">
+          <h3 style="justify-content: center;"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/automation.svg" alt=""> Enforce</h3>
+          <p>ArgoCD continuously reconciles cluster state to Git</p>
+        </div>
+        <div class="feature-card" style="text-align: center;">
+          <h3 style="justify-content: center;"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/analysis.svg" alt=""> Monitor</h3>
+          <p>ACM policies detect compliance violations independently</p>
+        </div>
+        <div class="feature-card" style="text-align: center;">
+          <h3 style="justify-content: center;"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/report.svg" alt=""> Audit</h3>
+          <p>Every drift event is recorded, even if healed in seconds</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: GETTING STARTED -->
+    <div class="slide" data-notes="The --setup flag runs sed to replace &lt;YOUR_ORG&gt; placeholders in three files: cluster-config-application.yaml, cluster-config-appproject.yaml, and console-notification.yaml. The demo script handles operator ordering automatically, waiting for the ACM CRD and webhook before creating the MultiClusterHub. The teardown script reverses everything including restoring the &lt;YOUR_ORG&gt; placeholders, handling stuck finalizers, and deleting namespaces last.">
+      <div class="slide-label animate-in">&mdash;&mdash; Getting Started</div>
+      <h2 class="animate-in"><img class="rh-icon small accent" src="https://cdn.jsdelivr.net/npm/@rhds/icons@2.1.0/standard/run-pipeline.svg" alt=""> Three Commands to <span class="accent">Demo-Ready</span></h2>
+      <ul class="setup-steps animate-in">
+        <li>
+          <span class="step-num">1.</span>
+          <span>Configure your GitHub org:<br><code>./demo/demo-script.sh --setup &lt;your-org&gt;</code></span>
+        </li>
+        <li>
+          <span class="step-num">2.</span>
+          <span>Commit and push to your remote:<br><code>git add -A &amp;&amp; git commit -m "Configure org" &amp;&amp; git push</code></span>
+        </li>
+        <li>
+          <span class="step-num">3.</span>
+          <span>Run the interactive demo:<br><code>./demo/demo-script.sh</code></span>
+        </li>
+      </ul>
+      <div class="body-text animate-in" style="margin-top: var(--rh-space-xl, 32px); padding-top: var(--rh-space-lg, 24px); border-top: 1px solid var(--tag-border);">
+        <strong>Cleanup:</strong> <code style="font-family: var(--font-mono); background: var(--bg-surface); padding: 2px 8px; border-radius: 3px;">./demo/teardown.sh</code> removes all resources, handles stuck finalizers, and restores placeholders.
+      </div>
+    </div>
+
+    <!-- SLIDE 10: KEY TAKEAWAYS -->
+    <div class="slide" data-notes="The fundamental shift here is from 'trust people to follow the process' to 'the platform enforces the process automatically.' This eliminates an entire class of incidents caused by well-intentioned manual changes. The combination of ArgoCD (enforcement) and ACM (audit) creates a defense-in-depth model for cluster configuration governance.">
+      <div class="slide-label animate-in">&mdash;&mdash; Takeaways</div>
+      <h2 class="animate-in">What <span class="accent">Changes</span> with GitOps Drift Prevention</h2>
+      <ul class="takeaway-list animate-in">
+        <li>
+          <span class="takeaway-number">1</span>
+          <span><strong>Git is the single source of truth.</strong> All cluster configuration is version-controlled, reviewable, and auditable.</span>
+        </li>
+        <li>
+          <span class="takeaway-number">2</span>
+          <span><strong>Drift is corrected automatically.</strong> ArgoCD selfHeal + prune reverts unauthorized changes within seconds.</span>
+        </li>
+        <li>
+          <span class="takeaway-number">3</span>
+          <span><strong>Security policies can't be bypassed.</strong> RBAC, NetworkPolicies, and ResourceQuotas are continuously enforced.</span>
+        </li>
+        <li>
+          <span class="takeaway-number">4</span>
+          <span><strong>Compliance is provable.</strong> ACM governance policies record every drift event for audit.</span>
+        </li>
+        <li>
+          <span class="takeaway-number">5</span>
+          <span><strong>Zero manual intervention required.</strong> Detection, correction, and recording happen without human involvement.</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- SLIDE 11: THANK YOU -->
+    <div class="slide thank-you-slide" data-notes="Repository: github.com/&lt;YOUR_ORG&gt;/ACMGitOps. Components: OpenShift 4.20, OpenShift GitOps 1.20, ACM 2.16. The deck was generated from the live repo at /Users/cbowland/workspace/ACMGitOps/.">
+      <h1 class="animate-in">Thank <span class="accent">You</span></h1>
+      <div class="attribution animate-in" style="margin-top: 0; padding-top: 0;">ACM + ArgoCD Drift Prevention Demo</div>
+      <div class="logo-footer animate-in">
+        <svg class="rh-logo large" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 613 145" role="img" aria-label="Red Hat"><title>Red Hat</title><path d="M127.47,83.49c12.51,0,30.61-2.58,30.61-17.46a14,14,0,0,0-.31-3.42l-7.45-32.36c-1.72-7.12-3.23-10.35-15.73-16.6C124.89,8.69,103.76.5,97.51.5,91.69.5,90,8,83.06,8c-6.68,0-11.64-5.6-17.89-5.6-6,0-9.91,4.09-12.93,12.5,0,0-8.41,23.72-9.49,27.16A6.43,6.43,0,0,0,42.53,44c0,9.22,36.3,39.45,84.94,39.45M160,72.07c1.73,8.19,1.73,9.05,1.73,10.13,0,14-15.74,21.77-36.43,21.77C78.54,104,37.58,76.6,37.58,58.49a18.45,18.45,0,0,1,1.51-7.33C22.27,52,.5,55,.5,74.22c0,31.48,74.59,70.28,133.65,70.28,45.28,0,56.7-20.48,56.7-36.65,0-12.72-11-27.16-30.83-35.78" fill="#e00"/><path d="M160,72.07c1.73,8.19,1.73,9.05,1.73,10.13,0,14-15.74,21.77-36.43,21.77C78.54,104,37.58,76.6,37.58,58.49a18.45,18.45,0,0,1,1.51-7.33l3.66-9.06A6.43,6.43,0,0,0,42.53,44c0,9.22,36.3,39.45,84.94,39.45,12.51,0,30.61-2.58,30.61-17.46a14,14,0,0,0-.31-3.42Z"/><path d="M579.74,92.8c0,11.89,7.15,17.67,20.19,17.67a52.11,52.11,0,0,0,11.89-1.68V95a24.84,24.84,0,0,1-7.68,1.16c-5.37,0-7.36-1.68-7.36-6.73V68.3h15.56V54.1H596.78v-18l-17,3.68V54.1H568.49V68.3h11.25Zm-53,.32c0-3.68,3.69-5.47,9.26-5.47a43.12,43.12,0,0,1,10.1,1.26v7.15a21.51,21.51,0,0,1-10.63,2.63c-5.46,0-8.73-2.1-8.73-5.57m5.2,17.56c6,0,10.84-1.26,15.36-4.31v3.37h16.82V74.08c0-13.56-9.14-21-24.39-21-8.52,0-16.94,2-26,6.1l6.1,12.52c6.52-2.74,12-4.42,16.83-4.42,7,0,10.62,2.73,10.62,8.31v2.73a49.53,49.53,0,0,0-12.62-1.58c-14.31,0-22.93,6-22.93,16.73,0,9.78,7.78,17.24,20.19,17.24m-92.44-.94h18.09V80.92h30.29v28.82H506V36.12H487.93V64.41H457.64V36.12H439.55ZM370.62,81.87c0-8,6.31-14.1,14.62-14.1A17.22,17.22,0,0,1,397,72.09V91.54A16.36,16.36,0,0,1,385.24,96c-8.2,0-14.62-6.1-14.62-14.09m26.61,27.87h16.83V32.44l-17,3.68V57.05a28.3,28.3,0,0,0-14.2-3.68c-16.19,0-28.92,12.51-28.92,28.5a28.25,28.25,0,0,0,28.4,28.6,25.12,25.12,0,0,0,14.93-4.83ZM320,67c5.36,0,9.88,3.47,11.67,8.83H308.47C310.15,70.3,314.36,67,320,67M291.33,82c0,16.2,13.25,28.82,30.28,28.82,9.36,0,16.2-2.53,23.25-8.42l-11.26-10c-2.63,2.74-6.52,4.21-11.14,4.21a14.39,14.39,0,0,1-13.68-8.83h39.65V83.55c0-17.67-11.88-30.39-28.08-30.39a28.57,28.57,0,0,0-29,28.81M262,51.58c6,0,9.36,3.78,9.36,8.31S268,68.2,262,68.2H244.11V51.58Zm-36,58.16h18.09V82.92h13.77l13.89,26.82H292l-16.2-29.45a22.27,22.27,0,0,0,13.88-20.72c0-13.25-10.41-23.45-26-23.45H226Z" fill="#151515"/></svg>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="nav-hint">&larr; &rarr; or click to navigate &middot; N for additional context</div>
+    <div class="progress"><span class="current">1</span> / <span class="total">11</span></div>
+  </div>
+
+  <!-- NOTES PANEL -->
+  <div class="notes-panel"></div>
+
+  <script>
+    (function() {
+      const slides = document.querySelectorAll('.slide');
+      const currentEl = document.querySelector('.current');
+      const totalEl = document.querySelector('.total');
+      const notesPanel = document.querySelector('.notes-panel');
+      let idx = 0;
+      let notesVisible = false;
+
+      totalEl.textContent = slides.length;
+
+      function show(i) {
+        slides.forEach((s, j) => {
+          s.classList.toggle('active', j === i);
+          s.style.display = j === i ? 'flex' : 'none';
+        });
+        currentEl.textContent = i + 1;
+        if (notesVisible && notesPanel) {
+          const note = slides[i].dataset.notes || '';
+          notesPanel.innerHTML = note;
+        }
+      }
+
+      function next() { if (idx < slides.length - 1) { idx++; show(idx); } }
+      function prev() { if (idx > 0) { idx--; show(idx); } }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+        if (e.key === 'ArrowLeft') { prev(); }
+        if (e.key === 'n' || e.key === 'N') {
+          notesVisible = !notesVisible;
+          if (notesPanel) notesPanel.classList.toggle('visible', notesVisible);
+          show(idx);
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('.controls') || e.target.closest('.notes-panel')) return;
+        const x = e.clientX / window.innerWidth;
+        x > 0.5 ? next() : prev();
+      });
+
+      let touchStartX = 0;
+      document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+      document.addEventListener('touchend', (e) => {
+        const diff = e.changedTouches[0].clientX - touchStartX;
+        if (Math.abs(diff) > 50) { diff < 0 ? next() : prev(); }
+      });
+
+      show(0);
+    })();
+  </script>
+</body>
+</html>
