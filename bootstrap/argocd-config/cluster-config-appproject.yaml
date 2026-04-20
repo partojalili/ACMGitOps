@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cluster-config
+  namespace: openshift-gitops
+spec:
+  description: "Project for cluster configuration management with drift prevention"
+  sourceRepos:
+    - "https://github.com/<YOUR_ORG>/ACMGitOps.git"
+  destinations:
+    - namespace: "*"
+      server: "https://kubernetes.default.svc"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: console.openshift.io
+      kind: ConsoleNotification
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: LimitRange
+    - group: ""
+      kind: ResourceQuota
+    - group: networking.k8s.io
+      kind: NetworkPolicy

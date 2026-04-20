@@ -1,0 +1,17 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PolicyGenerator
+metadata:
+  name: cluster-config-policies
+policyDefaults:
+  namespace: open-cluster-management
+  remediationAction: inform
+  severity: high
+  complianceType: mustonlyhave
+  placement:
+    clusterSelectors:
+      vendor: OpenShift
+policies:
+  - name: policy-console-banner
+    manifests:
+      - path: input/banner-must-exist.yaml
+    remediationAction: inform

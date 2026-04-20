@@ -1,0 +1,12 @@
+apiVersion: console.openshift.io/v1
+kind: ConsoleNotification
+metadata:
+  name: gitops-managed-cluster
+spec:
+  text: "This cluster is managed by GitOps. All configuration changes must go through Git."
+  location: BannerTop
+  color: "#FFFFFF"
+  backgroundColor: "#0066CC"
+  link:
+    href: "https://github.com/<YOUR_ORG>/ACMGitOps"
+    text: "View GitOps Repo"

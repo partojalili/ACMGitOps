@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitops-demo-secured
+  labels:
+    managed-by: argocd
+    purpose: drift-prevention-demo

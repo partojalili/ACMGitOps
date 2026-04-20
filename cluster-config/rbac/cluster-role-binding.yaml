@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gitops-demo-viewer-binding
+  labels:
+    managed-by: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gitops-demo-viewer
+subjects:
+  - kind: Group
+    name: demo-viewers
+    apiGroup: rbac.authorization.k8s.io
