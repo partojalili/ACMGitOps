@@ -8,5 +8,5 @@ spec:
   color: "#FFFFFF"
   backgroundColor: "#0066CC"
   link:
-    href: "https://github.com/<YOUR_ORG>/ACMGitOps"
+    href: "https://github.com/cbowland/ACMGitOps"
     text: "View GitOps Repo"

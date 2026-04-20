@@ -6,7 +6,7 @@ metadata:
 spec:
   project: cluster-config
   source:
-    repoURL: "https://github.com/<YOUR_ORG>/ACMGitOps.git"
+    repoURL: "https://github.com/cbowland/ACMGitOps.git"
     targetRevision: main
     path: cluster-config
   destination:

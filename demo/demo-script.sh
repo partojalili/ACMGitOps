@@ -72,7 +72,7 @@ run_cmd "oc apply -k ${SCRIPT_DIR}/bootstrap/operators/openshift-gitops/"
 
 echo ""
 echo "Waiting for the GitOps operator CSV to succeed..."
-run_cmd "oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/openshift-gitops-operator -n openshift-operators --timeout=120s || true"
+run_cmd "oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription.operators.coreos.com/openshift-gitops-operator -n openshift-operators --timeout=120s || true"
 
 echo ""
 echo "Waiting for ArgoCD server pod to be ready..."
@@ -88,11 +88,48 @@ done
 pause
 
 echo -e "${BOLD}Step 0.2: Install ACM Operator${NC}"
-echo "Creates the namespace, operator group, subscription, and MultiClusterHub."
-echo "Note: MultiClusterHub takes 5-10 minutes to fully deploy."
+echo "Creates the namespace, operator group, and subscription."
+echo "Then waits for the CRD before creating the MultiClusterHub."
 pause
 
 run_cmd "oc apply -k ${SCRIPT_DIR}/bootstrap/operators/acm/"
+
+echo ""
+echo "Waiting for ACM operator to install and register CRDs..."
+for i in $(seq 1 60); do
+  if oc get crd multiclusterhubs.operator.open-cluster-management.io &>/dev/null; then
+    echo -e "${GREEN}MultiClusterHub CRD is available!${NC}"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo -e "${RED}Timed out waiting for CRD. Check operator status:${NC}"
+    echo "  oc get csv -n open-cluster-management"
+    exit 1
+  fi
+  echo "  ...waiting for CRD (${i}/60)"
+  sleep 10
+done
+
+echo ""
+echo "Waiting for ACM operator webhook to be ready..."
+for i in $(seq 1 60); do
+  if oc get endpoints multiclusterhub-operator-webhook -n open-cluster-management -o jsonpath='{.subsets[0].addresses}' 2>/dev/null | grep -q ip; then
+    echo -e "${GREEN}ACM webhook endpoint is ready!${NC}"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo -e "${RED}Timed out waiting for webhook. Check operator pods:${NC}"
+    echo "  oc get pods -n open-cluster-management"
+    exit 1
+  fi
+  echo "  ...waiting for webhook (${i}/60)"
+  sleep 10
+done
+
+echo ""
+echo -e "${BOLD}Step 0.3: Create MultiClusterHub${NC}"
+echo "Now that the CRD and webhook are ready, we can create the MultiClusterHub instance."
+run_cmd "oc apply -f ${SCRIPT_DIR}/bootstrap/operators/acm/multiclusterhub.yaml"
 
 echo ""
 echo "ACM is deploying. The MultiClusterHub will take several minutes."
@@ -107,14 +144,14 @@ pause
 narrate "PART 1: Verify Operators Are Healthy"
 
 echo -e "${BOLD}Step 1.1: Check OpenShift GitOps${NC}"
-run_cmd "oc get subscription openshift-gitops-operator -n openshift-operators"
+run_cmd "oc get subscription.operators.coreos.com openshift-gitops-operator -n openshift-operators"
 echo ""
 run_cmd "oc get pods -n openshift-gitops"
 
 pause
 
 echo -e "${BOLD}Step 1.2: Check ACM${NC}"
-run_cmd "oc get subscription advanced-cluster-management -n open-cluster-management"
+run_cmd "oc get subscription.operators.coreos.com advanced-cluster-management -n open-cluster-management"
 echo ""
 run_cmd "oc get multiclusterhub -n open-cluster-management || echo 'MultiClusterHub not yet available'"
 
@@ -144,7 +181,7 @@ sleep 15
 pause
 
 echo -e "${BOLD}Step 2.2: Verify the Application is synced${NC}"
-run_cmd "oc get application cluster-config -n openshift-gitops"
+run_cmd "oc get application.argoproj.io cluster-config -n openshift-gitops"
 
 pause
 
@@ -177,9 +214,9 @@ run_cmd "oc get resourcequota compute-quota -n gitops-demo-quotas"
 pause
 
 echo -e "${BOLD}Step 3.5: ArgoCD Application Sync Status${NC}"
-run_cmd "oc get application cluster-config -n openshift-gitops -o jsonpath='{.status.sync.status}'"
+run_cmd "oc get application.argoproj.io cluster-config -n openshift-gitops -o jsonpath='{.status.sync.status}'"
 echo ""
-run_cmd "oc get application cluster-config -n openshift-gitops -o jsonpath='{.status.health.status}'"
+run_cmd "oc get application.argoproj.io cluster-config -n openshift-gitops -o jsonpath='{.status.health.status}'"
 echo ""
 
 pause

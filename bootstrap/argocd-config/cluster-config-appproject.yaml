@@ -6,7 +6,7 @@ metadata:
 spec:
   description: "Project for cluster configuration management with drift prevention"
   sourceRepos:
-    - "https://github.com/<YOUR_ORG>/ACMGitOps.git"
+    - "https://github.com/cbowland/ACMGitOps.git"
   destinations:
     - namespace: "*"
       server: "https://kubernetes.default.svc"

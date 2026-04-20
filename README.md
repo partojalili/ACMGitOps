@@ -8,7 +8,7 @@ Demonstrates that OpenShift cluster configuration managed via GitOps (ArgoCD) is
 |---|---|---|
 | OpenShift | 4.20 | N/A |
 | OpenShift GitOps | 1.20 | `gitops-1.20` |
-| ACM | 2.12 | `release-2.12` |
+| ACM | 2.16 | `release-2.16` |
 
 ## Prerequisites
 
@@ -19,18 +19,23 @@ Demonstrates that OpenShift cluster configuration managed via GitOps (ArgoCD) is
 ## Repository Structure
 
 ```
-bootstrap/           # Applied manually (one-time setup)
-  operators/         # Operator subscriptions (ACM, GitOps)
-  argocd-config/     # ArgoCD Application with selfHeal + prune
+bootstrap/
+  operators/
+    openshift-gitops/  # GitOps operator subscription
+    acm/               # ACM operator subscription + MultiClusterHub
+  argocd-config/       # ArgoCD Application with selfHeal + prune
 
-cluster-config/      # Managed by ArgoCD (drift-protected)
-  console-banner/    # Visual: blue "GitOps managed" banner
-  rbac/              # Security: read-only ClusterRole + binding
-  network-policy/    # Security: deny-all egress NetworkPolicy
-  resource-quota/    # Operational: LimitRange + ResourceQuota
+cluster-config/        # Managed by ArgoCD (drift-protected)
+  console-banner/      # Visual: blue "GitOps managed" banner
+  rbac/                # Security: read-only ClusterRole + binding
+  network-policy/      # Security: deny-all egress NetworkPolicy
+  resource-quota/      # Operational: LimitRange + ResourceQuota
 
-acm-policies/        # Optional: ACM governance policies
-demo/                # Interactive demo script
+acm-policies/          # Optional: ACM governance policies
+
+demo/
+  demo-script.sh       # Interactive demo script
+  teardown.sh          # Removes all demo resources from the cluster
 ```
 
 ## Quick Start
@@ -51,6 +56,27 @@ demo/                # Interactive demo script
    ```bash
    ./demo/demo-script.sh
    ```
+
+The demo script handles operator installation order automatically — it waits for the ACM operator CRD and webhook to be ready before creating the MultiClusterHub instance.
+
+## Teardown
+
+To remove all demo resources from the cluster:
+
+```bash
+./demo/teardown.sh
+```
+
+The teardown script removes resources in the correct order:
+
+1. ArgoCD Application (stops self-healing)
+2. Cluster-config resources (banner, RBAC, network policy, quotas)
+3. ArgoCD AppProject and ClusterRoleBinding
+4. MultiClusterHub (with finalizer handling if stuck)
+5. ACM operator (subscription, CSV, operator group)
+6. OpenShift GitOps operator (subscription, CSV)
+7. Namespaces (last, with stuck-namespace finalizer cleanup)
+8. Restores `<YOUR_ORG>` placeholders in manifests (reverses `--setup`)
 
 ## What the Demo Shows
 
